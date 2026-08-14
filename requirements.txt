@@ -1,0 +1,10 @@
+python-dotenv
+sentry-sdk
+pydantic
+MetaTrader5
+pandas
+Flask==2.1.0
+flask-cors
+Flask-Pydantic
+sentry-sdk[flask]
+Werkzeug==2.2.2
