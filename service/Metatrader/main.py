@@ -85,6 +85,7 @@ class Metatrader(BaseService):
         volume = data["volume"]
         sl = data.get("sl")
         tp = data.get("tp")
+        comment = data.get("comment") or "fxbax"
 
         order_type = self.mt.ORDER_TYPE_BUY if side == "buy" else self.mt.ORDER_TYPE_SELL
         price = tick.ask if side == "buy" else tick.bid
@@ -99,9 +100,69 @@ class Metatrader(BaseService):
             "tp": float(tp) if tp else 0.0,
             "deviation": 20,
             "magic": 234000,
-            "comment": "fxbax",
+            "comment": comment,
             "type_time": self._order_time_constant(data.get("type_time", "gtc")),
             "type_filling": self._order_filling_constant(data.get("type_filling", "ioc")),
+        }
+
+        result = self.mt.order_send(request)
+        if result is None:
+            return {"retcode": None, "comment": "order_send returned None, error: " + str(mt5.last_error())}
+        return result._asdict()
+
+    def _find_position(self, ticket):
+        positions = self.mt.positions_get(ticket=int(ticket))
+        if not positions:
+            raise Exception("No open position with ticket " + str(ticket))
+        return positions[0]
+
+    def close_position(self, ticket, comment=None):
+        # Closing = an opposite-side market deal that carries the "position"
+        # key. Without that key MT5 would open a NEW (hedged) position instead
+        # of closing this one.
+        position = self._find_position(ticket)
+        symbol = position.symbol
+
+        self.mt.symbol_select(symbol, True)
+        tick = self.mt.symbol_info_tick(symbol)
+        if tick is None:
+            raise Exception("Could not get tick for " + symbol)
+
+        closing_buy = position.type == self.mt.POSITION_TYPE_BUY
+        order_type = self.mt.ORDER_TYPE_SELL if closing_buy else self.mt.ORDER_TYPE_BUY
+        price = tick.bid if closing_buy else tick.ask
+
+        request = {
+            "action": self.mt.TRADE_ACTION_DEAL,
+            "position": int(ticket),
+            "symbol": symbol,
+            "volume": float(position.volume),
+            "type": order_type,
+            "price": price,
+            "deviation": 20,
+            "magic": 234000,
+            "comment": comment or "fxbax-close",
+            "type_time": self.mt.ORDER_TIME_GTC,
+            "type_filling": self.mt.ORDER_FILLING_IOC,
+        }
+
+        result = self.mt.order_send(request)
+        if result is None:
+            return {"retcode": None, "comment": "order_send returned None, error: " + str(mt5.last_error())}
+        return result._asdict()
+
+    def modify_position(self, ticket, sl=None, tp=None):
+        # TRADE_ACTION_SLTP replaces BOTH levels in one shot, and 0.0 means
+        # "remove the level" — so a side the caller didn't send is filled in
+        # from the live position to keep it unchanged.
+        position = self._find_position(ticket)
+
+        request = {
+            "action": self.mt.TRADE_ACTION_SLTP,
+            "position": int(ticket),
+            "symbol": position.symbol,
+            "sl": float(sl) if sl is not None else float(position.sl),
+            "tp": float(tp) if tp is not None else float(position.tp),
         }
 
         result = self.mt.order_send(request)

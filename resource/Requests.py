@@ -47,9 +47,33 @@ class Position(BaseModel):
     volume: float
     sl: Optional[float] = None
     tp: Optional[float] = None
+    comment: Optional[str] = None
     # Defaults mirror the values these fields replace (previously hardcoded
     # in service/Metatrader/main.py as ORDER_TIME_GTC / ORDER_FILLING_IOC),
     # so an older Laravel deploy that doesn't send these keys yet still
     # trades exactly like before this change.
     type_time: TypeTime = TypeTime.gtc
     type_filling: TypeFilling = TypeFilling.ioc
+
+
+# Close an open position by its MT5 ticket (from POST /positions) — used by
+# Laravel's trade-review flow when the AI decides the position should exit at
+# market now.
+class ClosePosition(BaseModel):
+    server: str
+    username: str
+    password: str
+    ticket: int
+    comment: Optional[str] = None
+
+
+# Change the SL/TP of an open position (TRADE_ACTION_SLTP). An omitted/null
+# level keeps the position's current value — it does NOT remove the level
+# (sending 0.0 to MT5 would).
+class ModifyPosition(BaseModel):
+    server: str
+    username: str
+    password: str
+    ticket: int
+    sl: Optional[float] = None
+    tp: Optional[float] = None

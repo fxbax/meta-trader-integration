@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_pydantic import validate
 
-from resource import Position
+from resource import Position, ClosePosition, ModifyPosition
 from service import *
 from utils import *
 
@@ -139,10 +139,45 @@ def trade(body: Position):
             "tp": body.tp,
             "type_time": body.type_time,
             "type_filling": body.type_filling,
+            "comment": body.comment,
         })
         return jsonify(result), 200
     except Exception as error:
         return jsonify({"error": str(error)}), 500
+
+@app.route('/close-position', methods=['POST'])
+@auth()
+@validate()
+def close_position(body: ClosePosition):
+    try:
+        service = Metatrader(
+            username=int(body.username),
+            password=body.password,
+            server=body.server
+        )
+
+        result = service.close_position(body.ticket, comment=body.comment)
+        return jsonify(result), 200
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
+@app.route('/modify-position', methods=['POST'])
+@auth()
+@validate()
+def modify_position(body: ModifyPosition):
+    try:
+        service = Metatrader(
+            username=int(body.username),
+            password=body.password,
+            server=body.server
+        )
+
+        result = service.modify_position(body.ticket, sl=body.sl, tp=body.tp)
+        return jsonify(result), 200
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000, debug=True)
