@@ -19,6 +19,7 @@ DefaultDirName={autopf}\MetaTrader Integration
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=Setup-MetaTrader-Integration-v{#MyAppVersion}
+OutputDir=Output
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

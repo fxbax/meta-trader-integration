@@ -1,0 +1,116 @@
+name: Build & Release Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Windows Release & Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.10 (64-bit)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          architecture: 'x64'
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest
+
+      - name: Run Test Suite
+        run: |
+          pytest -v
+
+      - name: Build Standalone Executable (PyInstaller)
+        run: |
+          pyinstaller --noconfirm --clean windows/pyinstaller.spec
+
+      - name: Bundle Service Management Scripts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/fxbax-mt/service | Out-Null
+          Copy-Item windows/service/* dist/fxbax-mt/service/ -Force
+          Write-Host "Service scripts bundled into dist/fxbax-mt/service" -ForegroundColor Green
+
+      - name: Compile Windows Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          }
+          Write-Host "Using Inno Setup Compiler at: $iscc"
+          & $iscc windows/installer/setup_script.iss
+
+      - name: Create Standalone Portable Zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/fxbax-mt/* -DestinationPath fxbax-mt-portable-windows-x64.zip -Force
+          Write-Host "Created fxbax-mt-portable-windows-x64.zip" -ForegroundColor Green
+
+      - name: Determine Release Tag
+        id: release_tag
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/*") {
+            $tag = $env:GITHUB_REF -replace "refs/tags/", ""
+          } elseif ("${{ inputs.tag_name }}") {
+            $tag = "${{ inputs.tag_name }}"
+          } else {
+            $tag = "v1.0.0"
+          }
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "Target Release Tag: $tag"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: MetaTrader 5 Integration ${{ steps.release_tag.outputs.tag }}
+          body: |
+            ## MetaTrader 5 Integration Service Release (${{ steps.release_tag.outputs.tag }})
+
+            High-performance, secure REST API bridge connecting web applications with local MetaTrader 5 terminal on Windows Server.
+
+            ### Downloadable Assets:
+            - **`Setup-MetaTrader-Integration-v1.0.0.exe`**: Complete Windows Setup Wizard.
+              - Prompts for API Port and Access Token during installation.
+              - Automatically registers and configures Windows Service (`MetaTraderIntegration`).
+              - Configures Windows Firewall rule.
+              - Does **not** require Python to be installed on the server.
+            - **`fxbax-mt-portable-windows-x64.zip`**: Portable standalone directory package.
+
+            ### System Requirements:
+            - Windows Server 2016+, Windows 10, or Windows 11 (64-bit)
+            - MetaTrader 5 (64-bit) desktop terminal with AutoTrading enabled
+          files: |
+            windows/installer/Output/Setup-MetaTrader-Integration-*.exe
+            fxbax-mt-portable-windows-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
