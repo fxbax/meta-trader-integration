@@ -1,8 +1,49 @@
-.idea
-venv
-.env
-.vscode
-.venv
+# Byte-compiled / optimized / DLL files
 __pycache__/
-**/__pycache__
-fxcm.log
+*.py[cod]
+*$py.class
+*.so
+
+# Environments & Virtualenv
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment configuration & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Distribution / Packaging / PyInstaller
+dist/
+build/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec.bak
+windows/installer/Output/
+
+# Unit test / coverage / pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+logs/
+*.log
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

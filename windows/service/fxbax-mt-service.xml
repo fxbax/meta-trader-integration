@@ -1,0 +1,20 @@
+<service>
+  <id>MetaTraderIntegration</id>
+  <name>MetaTrader 5 Integration Service</name>
+  <description>High-performance REST API bridge for MetaTrader 5 terminal automation.</description>
+  <executable>%BASE%\fxbax-mt.exe</executable>
+  <workingdirectory>%BASE%</workingdirectory>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+  <serviceaccount>
+    <domain>.</domain>
+    <user>LocalSystem</user>
+  </serviceaccount>
+</service>

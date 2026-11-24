@@ -8,3 +8,4 @@ flask-cors
 Flask-Pydantic
 sentry-sdk[flask]
 Werkzeug==2.2.2
+waitress>=3.0.0

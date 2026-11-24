@@ -1,177 +1,433 @@
-# fxbax-mt
+# MetaTrader 5 Integration Service
 
-پل اتصال بین **fxbax.com** و ترمینال **MetaTrader 5** شما. این برنامه یک وب‌سرویس کوچک (Flask) است که روی سیستم ویندوزی خودتان (همان جایی که MetaTrader 5 نصب است) اجرا می‌شود و امکان دریافت قیمت/کندل، مشاهده اطلاعات حساب و **اجرای معامله روی حساب متاتریدر شما** را برای fxbax.com فراهم می‌کند.
-
-> ⚠️ **الزامی:** این برنامه فقط روی **ویندوز** اجرا می‌شود (کتابخانه رسمی `MetaTrader5` پایتون فقط روی ویندوز کار می‌کند) و باید روی همان سیستمی نصب شود که **MetaTrader 5 نسخه ۵** روی آن نصب، لاگین و **AutoTrading (Algo Trading) فعال** است.
+A high-performance, production-ready Python service bridging web applications with the **MetaTrader 5 (MT5)** Windows terminal over a secure HTTP API.
 
 ---
 
-## پیش‌نیازها (چک‌لیست)
+## 1. Overview
 
-- [ ] یک سرور/سیستم **ویندوزی** (Windows Server 2016 به بعد، یا Windows 10/11) با دسترسی اینترنت پایدار ۲۴ ساعته
-- [ ] **Python 3.10 نسخه ۶۴ بیتی** نصب‌شده و به PATH اضافه شده
-- [ ] **MetaTrader 5 (۶۴ بیتی)** نصب و با اطلاعات حساب بروکر (شماره حساب / رمز / سرور) لاگین شده
-- [ ] دکمه **AutoTrading** در نوار ابزار متاتریدر روشن (سبز رنگ)
-- [ ] گزینه‌های زیر در MT5 → منوی `Tools > Options > Expert Advisors` فعال باشند:
-  - ✅ Allow algorithmic trading
-  - ✅ Allow DLL imports
-- [ ] یک حساب کاربری فعال در **fxbax.com** و **توکن API** گرفته‌شده از پنل کاربری
+This service provides an authenticated RESTful gateway to a locally running MetaTrader 5 terminal. It allows external applications to query real-time market rates, inspect account status, monitor open positions, retrieve historical trade deals, and execute trading actions (open, close, modify) with millisecond-level precision.
 
 ---
 
-## مرحله ۱ — آماده‌سازی MetaTrader 5
+## 2. Key Features
 
-1. MetaTrader 5 نسخه **۶۴ بیتی** را از سایت بروکرتان دانلود و نصب کنید.
-2. با شماره حساب، رمز عبور و نام سرور بروکر لاگین کنید و صحت اتصال را بررسی کنید.
-3. روی نوار ابزار بالای متاتریدر، دکمه **AutoTrading** را بزنید تا **سبز رنگ** شود.
-4. از منوی `Tools > Options > Expert Advisors` گزینه‌های **Allow algorithmic trading** و **Allow DLL imports** را تیک بزنید و OK کنید.
-5. متاتریدر را باز و لاگین‌شده رها کنید (فعال کردن AutoTrading یک تنظیم سطح ترمینال است، نه چیزی که برنامه پایتون بتواند از راه دور آن را روشن کند — اگر خاموش باشد، مرحله ارسال معامله با خطا مواجه می‌شود).
+- **Standard REST API**: Simple JSON endpoints for quotes, account data, trade execution, and position management.
+- **Strict Backward Compatibility**: Preserves exact request/response shapes and status codes for existing consumers.
+- **Production WSGI Server**: Powered by `Waitress`, providing multi-threaded concurrency on Windows Server.
+- **Thread-Safe MT5 Session Management**: Prevents concurrent race conditions when issuing terminal commands.
+- **Flexible Configuration**: Prioritized resolution across CLI arguments, environment variables, and configuration files.
+- **Credential Protection**: Automatic masking of passwords and access tokens in logs.
+- **Cross-Platform Testability**: Includes an extensive test suite with a complete MetaTrader 5 mock module.
 
 ---
 
-## مرحله ۲ — نصب Python
+## 3. Architecture Overview
 
-1. از [python.org](https://www.python.org/downloads/windows/) نسخه **Python 3.10 (64-bit)** را دانلود و نصب کنید.
-2. حین نصب حتماً تیک **Add python.exe to PATH** را بزنید.
-3. صحت نصب را با دستورات زیر در Command Prompt بررسی کنید:
-
-```powershell
-python --version
-pip --version
+```
+External Application (e.g., Laravel / AI Signal Engine)
+                        │  HTTP POST (Header: "token: <KEY>")
+                        ▼
+           ┌─────────────────────────┐
+           │     Waitress WSGI       │
+           └────────────┬────────────┘
+                        │
+           ┌────────────▼────────────┐
+           │ Flask Routing & Auth     │
+           │ Middleware (hmac-safe)   │
+           └────────────┬────────────┘
+                        │ Validated Schemas (Pydantic)
+           ┌────────────▼────────────┐
+           │     MT5Client Service   │  ◄── Thread Lock & Session Cache
+           └────────────┬────────────┘
+                        │ IPC / C-API
+           ┌────────────▼────────────┐
+           │ MetaTrader 5 Terminal   │
+           │ (64-bit with AutoTrading│
+           └─────────────────────────┘
 ```
 
 ---
 
-## مرحله ۳ — دریافت سورس پروژه
+## 4. Project Structure
 
-```powershell
-cd C:\
-git clone https://gitlab.com/malizade/fxbax-mt.git
-cd fxbax-mt
 ```
-
-(اگر `git` نصب نیست، می‌توانید از GitLab به‌صورت فایل ZIP دانلود و در یک پوشه مثل `C:\fxbax-mt` استخراج کنید.)
+.
+├── config/
+│   ├── __init__.py
+│   └── settings.py          # Centralized configuration (Port, Token, Log Level)
+├── src/
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── middleware.py    # Timing-safe token authentication
+│   │   └── routes.py        # 7 core API endpoints
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── payloads.py      # Pydantic request models & enums
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── exceptions.py    # Custom domain exceptions
+│   │   └── mt5_client.py    # Thread-safe MT5 terminal wrapper
+│   └── utils/
+│       ├── __init__.py
+│       └── logger.py        # Rotating file logger with credential masking
+├── tests/
+│   ├── conftest.py          # Pytest fixtures and complete MT5 mock
+│   ├── test_api_contracts.py# Contract tests for all endpoints
+│   ├── test_auth.py         # Authentication tests
+│   ├── test_cli.py          # Command-line interface tests
+│   ├── test_logger.py       # Sensitive data filter tests
+│   ├── test_mt5_client.py   # MT5 service tests
+│   └── test_settings.py     # Configuration tests
+├── run.py                   # Production CLI & Service entry point
+├── main.py                  # Backward-compatible application entry point
+├── requirements.txt         # Production dependencies
+├── .env.example             # Configuration template
+├── CONTRIBUTING.md          # Developer contribution guide
+└── LICENSE                  # MIT License
+```
 
 ---
 
-## مرحله ۴ — نصب وابستگی‌ها
+## 5. Requirements
+
+- **Operating System**: Windows Server 2016+, Windows 10, or Windows 11 (64-bit).
+- **Python**: Version 3.10 or higher (64-bit).
+- **MetaTrader 5**: 64-bit desktop terminal installed and logged into a broker account.
+- **Terminal Permissions**:
+  - `AutoTrading` / `Algo Trading` toggled **ON** (green icon).
+  - Terminal options (`Tools > Options > Expert Advisors`):
+    - [x] Allow algorithmic trading
+    - [x] Allow DLL imports
+
+---
+
+## 6. Installation
+
+Clone the repository and install dependencies in a virtual environment:
 
 ```powershell
+# Clone repository
+git clone https://github.com/fxbax/meta-trader-integration.git
+cd meta-trader-integration
+
+# Create virtual environment
 python -m venv venv
-venv\Scripts\activate
+.\venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
 ---
 
-## مرحله ۵ — ساخت اکانت در fxbax.com و دریافت توکن
+## 7. Configuration
 
-برنامه روی سرور شما، هر درخواستی که از سمت fxbax.com می‌رسد را با یک **توکن اختصاصی** احراز هویت می‌کند. این توکن را باید از حساب کاربری خودتان در fxbax.com بگیرید:
-
-1. به آدرس **https://fxbax.com** بروید و از منو روی **«حساب کاربری»** کلیک کنید.
-2. یک حساب جدید بسازید: فرم ثبت‌نام را با **ایمیل یا شماره موبایل + رمز عبور** تکمیل کنید (در صورت نیاز، کد تایید ارسالی را وارد کنید).
-3. وارد پنل کاربری خود شوید.
-4. در پنل، به بخش **اتصال متاتریدر** بروید و اطلاعات حساب MT5 خود را ثبت کنید:
-   - شماره حساب (Login)
-   - رمز عبور حساب متاتریدر
-   - نام سرور بروکر (مثلاً `Alpari-MT5-Demo`)
-5. پس از ذخیره، یک **توکن API** برای شما نمایش داده می‌شود. این همان مقداری است که در مرحله بعد باید در فایل `.env` قرار دهید.
-
-> 📌 این توکن را جایی امن نگه دارید. اگر بعداً از داخل پنل fxbax.com توکن را عوض/باطل کنید، باید مقدار جدید را در `.env` سرور ویندوزی هم به‌روزرسانی و برنامه را دوباره اجرا کنید، وگرنه درخواست‌ها با خطای ۴۰۱ برگردانده می‌شوند.
->
-> ℹ️ نام دقیق منوها ممکن است در پنل کمی متفاوت باشد (مثلاً «اتصال متاتریدر» به‌جای «تنظیمات API») — به‌صورت کلی دنبال بخشی بگردید که اطلاعات حساب MT5 و توکن را نشان می‌دهد.
-
----
-
-## مرحله ۶ — تنظیم فایل `.env`
+Create your local `.env` file from the example:
 
 ```powershell
 copy .env.example .env
 ```
 
-فایل `.env` را با یک ویرایشگر متنی (مثل Notepad) باز کنید و مقدار `AUTH_TOKEN` را با توکنی که در مرحله قبل از پنل fxbax.com گرفتید جایگزین کنید:
+Open `.env` and configure your secret access token and desired port:
 
 ```env
-SENTRY_DNS=...
-SENTRY_TSR=1.0
-AUTH_TOKEN=توکن-واقعی-گرفته‌شده-از-پنل-fxbax.com
+PORT=5000
+HOST=0.0.0.0
+AUTH_TOKEN=your-random-secret-key-here
+LOG_LEVEL=INFO
+LOG_DIR=logs
 ```
-
-مقادیر `SENTRY_DNS` و `SENTRY_TSR` را می‌توانید بدون تغییر رها کنید.
 
 ---
 
-## مرحله ۷ — اجرای برنامه
+## 8. Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `PORT` | TCP port the server binds to | `5000` |
+| `HOST` | Network interface to bind to | `0.0.0.0` |
+| `AUTH_TOKEN` | Required token in `token` HTTP header | *None (Required)* |
+| `LOG_LEVEL` | Minimum logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
+| `LOG_DIR` | Directory for rotating log files | `logs` |
+| `SENTRY_DSN` | Remote error monitoring DSN (optional) | *Empty* |
+
+---
+
+## 9. Running the Application
+
+### Production Mode (Recommended - Waitress WSGI)
 
 ```powershell
-venv\Scripts\activate
-python main.py
+python run.py --port 5000 --threads 4
 ```
 
-اگر همه چیز درست باشد، خروجی مشابه زیر را می‌بینید و سرویس روی پورت **5000** بالا می‌آید:
-
-```
-* Running on all addresses (0.0.0.0)
-* Running on http://127.0.0.1:5000
-```
-
-سرویس باید همیشه در حال اجرا بماند تا fxbax.com بتواند به آن متصل شود (نگاه کنید به بخش «اجرای دائمی» در پایین).
-
----
-
-## مرحله ۸ — باز کردن پورت در فایروال ویندوز
-
-برای اینکه fxbax.com بتواند از بیرون به این سرویس متصل شود، پورت ۵۰۰۰ باید در فایروال ویندوز باز باشد:
+### Development Mode (with hot-reload)
 
 ```powershell
-netsh advfirewall firewall add rule name="fxbax-mt" dir=in action=allow protocol=TCP localport=5000
+python run.py --dev --port 5000
 ```
 
-اگر سرور شما IP عمومی ندارد، باید از طریق روتر/شبکه، پورت ۵۰۰۰ را به این سیستم **پورت‌فوروارد** کنید.
+### Overriding Settings via CLI
 
----
-
-## مرحله ۹ — تست نصب
-
-با یک ابزار مثل `curl` یا Postman، بررسی کنید سرویس بالا و توکن درست تنظیم شده است:
+Command-line flags take precedence over `.env`:
 
 ```powershell
-curl -X POST http://SERVER-IP:5000/account-info ^
-  -H "token: توکن-شما" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"username\": 51565591, \"password\": \"xxxx\", \"server\": \"Alpari-MT5-Demo\"}"
+python run.py -p 8080 -t "custom-temporary-token" -l DEBUG
 ```
-
-خروجی موفق، اطلاعات حساب متاتریدر (موجودی، ایکوییتی و ...) را به‌صورت JSON برمی‌گرداند.
 
 ---
 
-## (اختیاری، توصیه‌شده) اجرای دائمی به‌صورت سرویس ویندوزی
+## 10. API Documentation
 
-برای اینکه برنامه بعد از ری‌استارت سرور یا خروج کاربر هم به کار خودش ادامه دهد، بهتر است آن را با ابزار [NSSM](https://nssm.cc/) به‌صورت یک Windows Service اجرا کنید:
+All requests must include the `token` header:
+
+```http
+token: your-random-secret-key-here
+Content-Type: application/json
+```
+
+### 10.1. `POST /account-info`
+Fetches balance, equity, leverage, and margin details.
+
+**Request Body:**
+```json
+{
+  "username": 123456,
+  "password": "account_password",
+  "server": "Broker-Server-Name"
+}
+```
+
+**Success Response (`200 OK`):**
+```json
+{
+  "login": 123456,
+  "balance": 10000.0,
+  "equity": 10000.0,
+  "profit": 0.0,
+  "leverage": 100,
+  "margin": 0.0,
+  "margin_free": 10000.0
+}
+```
+
+---
+
+### 10.2. `POST /positions`
+Lists open positions, optionally filtered by symbol.
+
+**Request Body:**
+```json
+{
+  "username": 123456,
+  "password": "account_password",
+  "server": "Broker-Server-Name",
+  "symbol": "EURUSD"
+}
+```
+
+**Success Response (`200 OK`):**
+```json
+[
+  {
+    "ticket": 98765432,
+    "symbol": "EURUSD",
+    "type": 0,
+    "volume": 0.1,
+    "price_open": 1.05500,
+    "sl": 1.05000,
+    "tp": 1.06500,
+    "profit": 15.20
+  }
+]
+```
+
+---
+
+### 10.3. `POST /history`
+Retrieves past deals within an optional date range.
+
+**Request Body:**
+```json
+{
+  "username": 123456,
+  "password": "account_password",
+  "server": "Broker-Server-Name",
+  "from": "2026-01-01T00:00:00",
+  "to": "2026-02-01T00:00:00"
+}
+```
+
+---
+
+### 10.4. `POST /trade`
+Places a new market order.
+
+**Request Body:**
+```json
+{
+  "platform": "Metatrader",
+  "server": "Broker-Server-Name",
+  "username": "123456",
+  "password": "account_password",
+  "hedge": true,
+  "symbol": "EURUSD",
+  "side": "buy",
+  "volume": 0.1,
+  "sl": 1.05000,
+  "tp": 1.06500,
+  "comment": "ai-signal-101",
+  "type_time": "gtc",
+  "type_filling": "ioc"
+}
+```
+
+---
+
+### 10.5. `POST /close-position`
+Closes an open position by its ticket.
+
+**Request Body:**
+```json
+{
+  "server": "Broker-Server-Name",
+  "username": "123456",
+  "password": "account_password",
+  "ticket": 98765432,
+  "comment": "close-signal"
+}
+```
+
+---
+
+### 10.6. `POST /modify-position`
+Updates Stop Loss (SL) and Take Profit (TP) of an open position.
+
+**Request Body:**
+```json
+{
+  "server": "Broker-Server-Name",
+  "username": "123456",
+  "password": "account_password",
+  "ticket": 98765432,
+  "sl": 1.05200,
+  "tp": 1.06800
+}
+```
+
+---
+
+### 10.7. `POST /info`
+Queries multi-symbol and multi-timeframe candle data.
+
+**Request Body:**
+```json
+{
+  "username": "123456",
+  "password": "account_password",
+  "server": "Broker-Server-Name",
+  "symbols": {
+    "EURUSD": 60
+  },
+  "timeframes": {
+    "m1": 0
+  }
+}
+```
+
+---
+
+## 11. Error Handling & Status Codes
+
+| Code | Meaning | Reason |
+|---|---|---|
+| `200` | OK | Request processed successfully. |
+| `400` | Bad Request | Validation error in payload fields (via Pydantic). |
+| `401` | Unauthorized | Missing or invalid `token` header. |
+| `500` | Internal Server Error | Exception during trade execution or data processing. |
+| `502` | Bad Gateway | Unable to connect to MT5 terminal or invalid broker credentials. |
+
+---
+
+## 12. Testing
+
+The test suite runs on any operating system without requiring an active MT5 terminal:
+
+```bash
+pytest -v
+```
+
+All 38 test cases validate contract compliance, authentication rules, MT5 operations, and CLI parameters.
+
+---
+
+## 13. Windows Server Installation
+
+For Windows Server environments without Python or developer tools:
+
+### Option A: Graphical Windows Installer (`Setup.exe`)
+1. Download `Setup-MetaTrader-Integration-v1.0.0.exe` from Releases.
+2. Run the installer as Administrator.
+3. In the setup wizard:
+   - Select the target installation directory (default: `C:\Program Files\MetaTrader Integration`).
+   - Specify your desired **HTTP API Port** (default: `5000`).
+   - Specify your secret **Access Token (AUTH_TOKEN)**.
+4. The installer automatically:
+   - Extracts all runtime binaries and dependencies.
+   - Creates the `.env` configuration file with your chosen Port and Token.
+   - Registers an inbound Windows Firewall allow rule for the selected port.
+   - Registers and starts the Windows Service with Automatic startup on server reboot.
+
+### Option B: Standalone Extracted Package
+If using the portable binary distribution:
+```powershell
+# In PowerShell as Administrator:
+cd C:\MetaTrader-Integration\windows\service
+.\install_service.ps1 -Port 5000 -AuthToken "your-secret-token"
+```
+
+---
+
+## 14. Windows Service Management
+
+The service runs continuously in the background as `MetaTraderIntegration`. Manage it via PowerShell or the Services MMC (`services.msc`):
 
 ```powershell
-nssm install fxbax-mt "C:\fxbax-mt\venv\Scripts\python.exe" "C:\fxbax-mt\main.py"
-nssm set fxbax-mt AppDirectory "C:\fxbax-mt"
-nssm start fxbax-mt
+# Using the bundled management script
+.\windows\service\manage_service.ps1 status
+.\windows\service\manage_service.ps1 restart
+.\windows\service\manage_service.ps1 logs
+
+# Or using native Windows commands
+net start MetaTraderIntegration
+net stop MetaTraderIntegration
+Restart-Service MetaTraderIntegration
 ```
 
----
-
-## عیب‌یابی رایج
-
-| مشکل | علت احتمالی |
-|---|---|
-| خطای `401 Authorization exception` | مقدار `AUTH_TOKEN` در `.env` با توکن پنل fxbax.com یکسان نیست، یا بعد از تغییر توکن، برنامه ری‌استارت نشده |
-| `could not fetch account info, check credentials/connection` | شماره حساب/رمز/سرور MT5 اشتباه است، یا AutoTrading در متاتریدر خاموش است |
-| معامله ثبت نمی‌شود / خطای Trade disabled | دکمه AutoTrading در MT5 سبز نیست، یا بروکر معاملات الگوریتمی را غیرفعال کرده |
-| `ModuleNotFoundError: No module named 'MetaTrader5'` | این پکیج فقط روی ویندوز نصب می‌شود؛ روی لینوکس/مک قابل نصب نیست |
-| اتصال از سمت fxbax.com برقرار نمی‌شود | پورت ۵۰۰۰ در فایروال/روتر باز نیست، یا IP عمومی سرور در دسترس نیست |
+### Changing Port or Access Key After Installation
+Settings can be updated at any time without recompiling or reinstalling:
+1. Open the `.env` file in the installation directory with Notepad.
+2. Update `PORT=...` or `AUTH_TOKEN=...`.
+3. If changing port, update the firewall: `netsh advfirewall firewall set rule name="MetaTrader Integration" new localport=<NEW_PORT>`.
+4. Restart the service: `net stop MetaTraderIntegration && net start MetaTraderIntegration`.
 
 ---
 
-## نکات امنیتی
+## 15. Security Considerations
 
-- توکن (`AUTH_TOKEN`) را مانند رمز عبور محرمانه نگه دارید و در جایی عمومی قرار ندهید.
-- در صورت امکان، در فایروال ویندوز دسترسی به پورت ۵۰۰۰ را فقط برای IP سرورهای fxbax.com مجاز کنید، نه برای همه اینترنت.
-- اطلاعات ورود متاتریدر (شماره حساب/رمز) فقط در پنل fxbax.com و فایل `.env` سرور شما نگه‌داری می‌شود؛ آن را در اختیار افراد دیگر قرار ندهید.
+- **Authentication**: Token verification uses constant-time string comparison (`hmac.compare_digest`) to protect against timing attacks.
+- **Credential Masking**: All logging handlers automatically redact `password` and `token` fields.
+- **Firewall Restriction**: Restrict inbound access to the configured port (`PORT`) to trusted caller IP addresses.
+
+---
+
+## 16. Contributing
+
+Contributions are welcome. Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for development workflows and guidelines.
+
+---
+
+## 17. License
+
+Distributed under the [MIT License](LICENSE).

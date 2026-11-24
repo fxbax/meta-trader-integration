@@ -1,1 +1,3 @@
-from .Metatrader import *
+from .Metatrader import Metatrader
+
+__all__ = ["Metatrader"]
