@@ -2,18 +2,18 @@
 # windows/pyinstaller.spec
 # PyInstaller configuration for building standalone Windows Server distribution
 
+import os
 import sys
-from pathlib import Path
 
 block_cipher = None
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 a = Analysis(
-    [str(PROJECT_ROOT / 'run.py')],
-    pathex=[str(PROJECT_ROOT)],
+    [os.path.join(PROJECT_ROOT, 'run.py')],
+    pathex=[PROJECT_ROOT],
     binaries=[],
     datas=[
-        (str(PROJECT_ROOT / '.env.example'), '.'),
+        (os.path.join(PROJECT_ROOT, '.env.example'), '.'),
     ],
     hiddenimports=[
         'waitress',
